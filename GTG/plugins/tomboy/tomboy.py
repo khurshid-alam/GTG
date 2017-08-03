@@ -45,14 +45,17 @@ class pluginTomboy:
         TOMBOY_ICON_PATH_ENDING = "icons/hicolor/scalable/apps/tomboy.svg"
         GNOTE_ICON_PATH_ENDING = "icons/hicolor/scalable/apps/gnote.svg"
         possible_paths = [
-            ("/usr/share/" + TOMBOY_ICON_PATH_ENDING, "tomboy"),
-            ("/usr/share/" + GNOTE_ICON_PATH_ENDING, "gnote"),
-            ("/usr/local/share/" + TOMBOY_ICON_PATH_ENDING, "tomboy"),
-            ("/usr/local/share/" + GNOTE_ICON_PATH_ENDING, "gnote")]
+            ("/usr/share/" + TOMBOY_ICON_PATH_ENDING, "Tomboy"),
+            ("/usr/share/" + GNOTE_ICON_PATH_ENDING, "Gnote"),
+            ("/usr/local/share/" + TOMBOY_ICON_PATH_ENDING, "Tomboy"),
+            ("/usr/local/share/" + GNOTE_ICON_PATH_ENDING, "Gnote")]
         for path, software in possible_paths:
             if os.path.isfile(path):
                 self.tomboy_icon_path = path
                 self.software = software
+                self.bus_name = "org.gnome." + self.software
+                self.object_path = "/org/gnome/" + self.software + "/RemoteControl"
+                self.dbus_interface = "org.gnome." + self.software + ".RemoteControl"
                 return True
         return False
 
@@ -181,8 +184,8 @@ class pluginTomboy:
     def getTomboyObject(self):
         bus = dbus.SessionBus()
         try:
-            obj = bus.get_object("org.gnome.Tomboy",
-                                 "/org/gnome/Tomboy/RemoteControl")
+            obj = bus.get_object(self.bus_name,
+                               self.object_path)
         except dbus.DBusException:
             DIALOG_DESTROY_WITH_PARENT = gtk.DIALOG_DESTROY_WITH_PARENT
             if not hasattr(self, "disable_flag"):
@@ -201,7 +204,7 @@ class pluginTomboy:
                 dialog.destroy()
                 self.disable_flag = True
             return None
-        return dbus.Interface(obj, "org.gnome.Tomboy.RemoteControl")
+        return dbus.Interface(obj, self.dbus_interface)
 
     # gets the list of the titles of the notes
     def getTomboyNoteTitleList(self):
