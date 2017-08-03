@@ -87,7 +87,6 @@ class Backend(PeriodicImportBackend):
         self.token = self._load_pickled_file(self.token_path, None)
         self.enqueued_start_get_task = False
         self.login_event = threading.Event()
-        self._this_is_the_first_loop = True
 
     def initialize(self):
         """
@@ -95,6 +94,7 @@ class Backend(PeriodicImportBackend):
         """
         super(Backend, self).initialize()
         self.rtm_proxy = RTMProxy(self._ask_user_to_confirm_authentication,
+                                  self._on_successful_authentication,  
                                   self.token)
 
     def save_state(self):
@@ -120,6 +120,10 @@ class Backend(PeriodicImportBackend):
                                                ).INTERACTION_CONFIRM,
                                                "on_login")
         self.login_event.wait()
+        BackendSignals().interaction_requested(self.get_id(),
+                                               "Thank you. Give us a moment to verify and save your authorization",
+                                               BackendSignals(
+                                               ).INTERACTION_TEXT, None)
 
     def on_login(self):
         '''
@@ -141,9 +145,6 @@ class Backend(PeriodicImportBackend):
         stored_rtm_task_ids = self.sync_engine.get_all_remote()
         current_rtm_task_ids = [tid for tid in
                                 self.rtm_proxy.get_rtm_tasks_dict().iterkeys()]
-
-        if self._this_is_the_first_loop:
-            self._on_successful_authentication()
 
         # If it's the very first time the backend is run, it's possible that
         # the user already synced his tasks in some way (but we don't know
@@ -200,9 +201,8 @@ class Backend(PeriodicImportBackend):
 
     def _on_successful_authentication(self):
         '''
-        Saves the token and requests a full flush on first autentication
+        Saves the token and requests a full flush on first authentication
         '''
-        self._this_is_the_first_loop = False
         self._store_pickled_file(self.token_path,
                                  self.rtm_proxy.get_auth_token())
         # we ask the Datastore to flush all the tasks on us
@@ -514,8 +514,10 @@ class RTMProxy(object):
 
     def __init__(self,
                  auth_confirm_fun,
+		 on_authentication_fun,
                  token=None):
         self.auth_confirm = auth_confirm_fun
+	self.on_auth = on_authentication_fun
         self.token = token
         self.authenticated = threading.Event()
         self.login_event = threading.Event()
@@ -576,6 +578,7 @@ class RTMProxy(object):
             try:
                 if self._login():
                     self.authenticated.set()
+		    self.on_auth()	
             except exceptions.IOError:
                 BackendSignals().backend_failed(self.get_id(),
                                                 BackendSignals.ERRNO_NETWORK)
@@ -655,8 +658,8 @@ class RTMProxy(object):
         http://www.rememberthemilk.com/services/api/tasks.rtm
         '''
         list_object_wrapper = self.rtm.tasks.getList(list_id=list_id,
-                                                     filter='includeArchived\
-                                                     :true').tasks
+                                                     filter='includeArchived'
+                                                     ':true').tasks
         list_object_list = self.__getattr_the_rtm_way(
             list_object_wrapper, 'list')
         if not list_object_list:
@@ -897,15 +900,19 @@ class RTMTask(object):
         '''
         deletes all the old notes in a task and sets a single note with the
         given text
-        '''
+        
         # delete old notes
         notes = self.rtm_taskseries.notes
+        
         if notes:
             note_list = self.__getattr_the_rtm_way(notes, 'note')
             for note_id in [note.id for note in note_list]:
                 result = self.rtm.tasksNotes.delete(timeline=self.timeline,
                                                     note_id=note_id)
                 transaction_ids.append(result.transaction.id)
+        '''
+
+	notes = self.rtm_taskseries.notes
 
         if text == "":
             return
@@ -915,24 +922,27 @@ class RTMTask(object):
         # Thus, we split long text in chunks. To make them show in the correct
         # order on the website, we have to upload them from the last to the
         # first (they show the most recent on top)
-        text_cursor_end = len(text)
-        while True:
-            text_cursor_start = text_cursor_end - 1000
-            if text_cursor_start < 0:
-                text_cursor_start = 0
-
+        
+        if notes:
+            note_list = self.__getattr_the_rtm_way(notes, 'note')
+            for note_id in [note.id for note in note_list]:
+	        nt = "".join(map(lambda note: "%s\n" % getattr(note, 'title'),
+                                 note_list))
+	
+                result = self.rtm.tasksNotes.edit(timeline=self.timeline,
+                                                    note_id=note_id,
+						    note_title=nt,
+                                                    note_text=text)
+                transaction_ids.append(result.transaction.id)
+        else:
             result = self.rtm.tasksNotes.add(timeline=self.timeline,
                                              list_id=self.rtm_list.id,
                                              taskseries_id=self.
                                              rtm_taskseries.id,
                                              task_id=self.rtm_task.id,
                                              note_title="",
-                                             note_text=text[text_cursor_start:
-                                                            text_cursor_end])
+                                             note_text=text)
             transaction_ids.append(result.transaction.id)
-            if text_cursor_start <= 0:
-                break
-            text_cursor_end = text_cursor_start - 1
 
     def get_due_date(self):
         '''
