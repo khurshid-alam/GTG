@@ -1,0 +1,40 @@
+Source: gtg
+Section: gnome
+Priority: optional
+Maintainer: Paulo Roberto Alves de Oliveira (aka kretcheu) <kretcheu@gmail.com>
+Uploaders: Python Applications Packaging Team <python-apps-team@lists.alioth.debian.org>
+Build-Depends: debhelper (>= 9), dh-python, rdfind, symlinks
+Build-Depends-Indep: python (>= 2.6.6-3~)
+Standards-Version: 3.9.8
+X-Python-Version: >= 2.6
+Homepage: http://gtgnome.net/
+Vcs-Svn: svn://anonscm.debian.org/python-apps/packages/gtg/trunk/
+Vcs-Browser: http://anonscm.debian.org/viewsvn/python-apps/packages/gtg/trunk/
+
+Package: gtg
+Architecture: all
+Depends: ${python:Depends},
+ ${misc:Depends},
+ python-configobj,
+ python-dbus,
+ python-glade2,
+ python-gtk2 (>= 2.14),
+ python-liblarch (>= 2.1.0),
+ python-notify,
+ python-xdg
+Recommends: python-simplejson,
+ yelp
+Suggests: bugz,
+ python-appindicator,
+ python-cairo,
+ python-cheetah,
+ python-dateutil,
+ python-evolution,
+ python-geoclue,
+ python-gnomekeyring,
+ python-launchpadlib,
+ python-suds
+Description: organizer for the GNOME desktop environment
+ Getting Things GNOME! is an organizer for the GNOME desktop environment.
+ GTG focuses on usability and ease of use. Its main objective is to
+ provide a simple and yet flexible organization tool for life and work.

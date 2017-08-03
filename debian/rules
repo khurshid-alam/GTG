@@ -1,0 +1,24 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python2
+
+clean:
+	dh $@ --with python2
+	rm -fr build
+
+override_dh_auto_install:
+	dh_auto_install -- --install-scripts=/usr/share/gtg --install-lib=/usr/share/gtg
+	find debian/gtg -name "*.egg-info" -delete
+	mv debian/gtg/usr/share/icons/hicolor/22x22/categories/items-tags.png debian/gtg/usr/share/icons/hicolor/16x16/categories/
+	rmdir debian/gtg/usr/share/icons/hicolor/22x22/categories
+	rm -rf debian/gtg/usr/share/locale/jbo
+
+# Replace duplicate files with symlinks
+	rdfind -outputname /dev/null -makesymlinks true debian/gtg/
+# Fix those symlinks to make them relative
+	symlinks -r -s -c debian/gtg/
+
+override_dh_fixperms:
+	chmod +x $(CURDIR)/debian/gtg/usr/share/gtg/GTG/plugins/export/export_templates/script_pocketmod
+	dh_fixperms

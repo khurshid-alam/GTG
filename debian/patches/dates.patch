@@ -1,0 +1,31 @@
+Description: Keep fuzzy dates relative to today
+Author: Frédéric Brière <fbriere@fbriere.net>
+
+Index: gtg-0.3.1/GTG/tools/dates.py
+===================================================================
+--- gtg-0.3.1.orig/GTG/tools/dates.py	2013-11-24 14:51:43.000000000 +0000
++++ gtg-0.3.1/GTG/tools/dates.py	2013-12-12 11:21:22.075273872 +0000
+@@ -61,10 +61,10 @@
+ }
+ # functions giving absolute dates for fuzzy dates + no date
+ FUNCS = {
+-    NOW: datetime.date.today(),
+-    SOON: datetime.date.today() + datetime.timedelta(15),
+-    SOMEDAY: datetime.date.max,
+-    NODATE: datetime.date.max - datetime.timedelta(1),
++    NOW: lambda: datetime.date.today(),
++    SOON: lambda: datetime.date.today() + datetime.timedelta(15),
++    SOMEDAY: lambda: datetime.date.max,
++    NODATE: lambda: datetime.date.max - datetime.timedelta(1),
+ }
+ 
+ # ISO 8601 date format
+@@ -130,7 +130,7 @@
+     def date(self):
+         """ Map date into real date, i.e. convert fuzzy dates """
+         if self.is_fuzzy():
+-            return FUNCS[self._fuzzy]
++            return FUNCS[self._fuzzy]()
+         else:
+             return self._real_date
+ 

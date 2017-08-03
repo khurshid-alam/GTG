@@ -1,0 +1,67 @@
+Description: Fix spelling errors in the man pages
+Author: Luca Falavigna <dktrkranz@debian.org>
+
+Index: gtg-0.3.1/doc/gtcli.1
+===================================================================
+--- gtg-0.3.1.orig/doc/gtcli.1	2013-11-24 14:51:43.000000000 +0000
++++ gtg-0.3.1/doc/gtcli.1	2013-12-12 11:06:57.803271514 +0000
+@@ -4,12 +4,12 @@
+ .SH SYNOPSIS
+ .B gtgcli [options] COMMAND [command options]
+ .SH DESCRIPTION
+-gtgcli provides a handy command-line interface to GTG. It allows to list and
+-modify your task directly from the command line. It also allows to interact
+-with GTG using shell scripts.
++gtgcli provides a handy command-line interface to GTG. It allows one to list
++and modify your task directly from the command line. It also allows one to
++interact with GTG using shell scripts.
+ .SH OPTIONS
+ .TP
+-\fB-h, --help\fB
++\fB\-h, \-\-help\fB
+ Prints some information about gtg's usage and options.
+ .SH COMMAND OPTIONS
+ .TP
+Index: gtg-0.3.1/doc/gtg.1
+===================================================================
+--- gtg-0.3.1.orig/doc/gtg.1	2013-11-24 14:51:43.000000000 +0000
++++ gtg-0.3.1/doc/gtg.1	2013-12-12 11:05:12.479272941 +0000
+@@ -18,31 +18,31 @@
+ of a very simple syntax.
+ .SH OPTIONS
+ .TP
+-\fB-b, --boot-test\fB
++\fB\-b, \-\-boot\-test\fB
+ Boot-up only.  Causes gtg to exit immediately after completing the first
+ iteration of the main loop.  Useful for boot performance testing work.
+ .TP
+-\fB-c, --no-crash-handler\fB
++\fB\-c, \-\-no-crash\-handler\fB
+ Disable crash handler.  Causes the Apport automatic crash reporting
+ utility to not be invoked when gtg crashes; instead it will print out a
+ normal python backtrace.  This can be useful for debugging crash bugs,
+ or if the crash handler is misbehaving.
+ .TP
+-\fB-d, --debug\fB
++\fB\-d, \-\-debug\fB
+ Debug mode.  Prints extra information to the console which may be useful
+ for understanding and reporting bugs.
+ .TP
+-\fB-h, --help\fB
++\fB\-h, \-\-help\fB
+ Prints some information about gtg's usage and options.
+ .TP
+-\fB-l, --local-liblarch\fB
++\fB\-l, \-\-local-liblarch\fB
+ Use local liblarch. Look for the liblarch python library in ../liblarch.
+ This is mainly useful for testing purpose.
+ .TP
+-\fB-t TITLE, --title=TITLE\fB
++\fB\-t TITLE, \-\-title=TITLE\fB
+ Set the window's title to TITLE.
+ .TP
+-\fB-v, --version\fB
++\fB\-v, \-\-version\fB
+ Prints version and exits.
+ .SH COPYRIGHT
+ This manual page is Copyright 2009, 2012 Luca Falavigna <dktrkranz@debian.org>
