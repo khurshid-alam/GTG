@@ -65,7 +65,7 @@ class Backend(PeriodicImportBackend):
     }
     
     _static_parameters = {
-        "username": {
+        "tags-to-list-dict": {
             GenericBackend.PARAM_TYPE: GenericBackend.TYPE_STRING,
             GenericBackend.PARAM_DEFAULT_VALUE: ""},
         "period": {
@@ -100,8 +100,8 @@ class Backend(PeriodicImportBackend):
         self.td_cache_path = os.path.join(self.local_dir, 'backends/todoist/todoist_cache')
         self.enqueued_start_get_task = False
         #self._this_is_the_first_loop = True
-        if (self._parameters["username"]):
-            s_data = self._parameters["username"]
+        if (self._parameters["tags-to-list-dict"]):
+            s_data = self._parameters["tags-to-list-dict"]
             self.tag_to_project_disc = ast.literal_eval(s_data)
         else:
             self.tag_to_project_disc = None

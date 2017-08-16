@@ -74,6 +74,10 @@ class ParametersUI(gtk.VBox):
                 "description": _("Username"),
                 "parameter_name": "username",
             })),
+            ("tags-to-list-dict", self.UI_generator(TextUI, {
+                "description": _("Tags to Tasklist"),
+                "parameter_name": "tags-to-list-dict",
+            })),
             ("password", self.UI_generator(PasswordUI)),
             ("period", self.UI_generator(PeriodUI)),
             ("service-url", self.UI_generator(TextUI, {
