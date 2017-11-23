@@ -371,7 +371,9 @@ class Backend(PeriodicImportBackend):
                 rt = xml_tree.getroot()
                 local_modified = self.get_param(rt, task.get_id(), "modified")
                 if not local_modified:
-                    local_modified = task.get_modified()
+                    #local_modified = task.get_modified()
+                    local_modified = datetime.datetime.strptime("2011-11-11T18:43:37", 
+                                                                "%Y-%m-%dT%H:%M:%S")
                 #Log.debug("GTG_modified: %s, TD_modified: %s" % (task.get_modified(), 
                                                                 #td_task.get_modified()))
                 meme = self.sync_engine.get_meme_from_remote_id(td_task_id)
