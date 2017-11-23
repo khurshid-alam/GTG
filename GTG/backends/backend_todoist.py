@@ -29,20 +29,20 @@ import ast
 import time
 import uuid
 import todoist
+import requests
 import threading
 import datetime
-import subprocess
 import exceptions
 from pprint import pprint
 import simplejson as json
+import xml.etree.ElementTree as ET
 from dateutil.tz import tzutc, tzlocal
 
-sys.path.append('/usr/share/gtg')
+#sys.path.append('/usr/share/gtg')
 from GTG.backends.genericbackend import GenericBackend
 from GTG import _
 from GTG.backends.backendsignals import BackendSignals
 from GTG.backends.syncengine import SyncEngine, SyncMeme
-from GTG.backends.rtm.rtm import createRTM, RTMError, RTMAPIError
 from GTG.backends.periodicimportbackend import PeriodicImportBackend
 from GTG.tools.dates import Date
 from GTG.core.task import Task
@@ -97,9 +97,12 @@ class Backend(PeriodicImportBackend):
                                        "auth_token-" + self.get_id())
         self.token = self._load_pickled_file(self.token_path, None)
         self.local_dir = os.path.join(os.path.expanduser('~'), '.local/share/gtg')
+        self.gtg_xml = os.path.join(self.local_dir, 'gtg_tasks.xml')
+        #self.xml_tree = ET.parse(self.gtg_xml)
+        #self.rt = self.xml_tree.getroot()
         self.td_cache_path = os.path.join(self.local_dir, 'backends/todoist/todoist_cache')
         self.enqueued_start_get_task = False
-        #self._this_is_the_first_loop = True
+        self._this_is_the_first_loop = True
         if (self._parameters["tags-to-list-dict"]):
             s_data = self._parameters["tags-to-list-dict"]
             self.tag_to_project_disc = ast.literal_eval(s_data)
@@ -135,7 +138,9 @@ class Backend(PeriodicImportBackend):
     def apply_credentials(self, token):
         """ Finish authentication or request for an authorization by applying the credentials """
         api = todoist.TodoistAPI(token, cache=self.td_cache_path)
-        self.authenticated = True        
+        self.authenticated = True
+        
+        self._on_successful_authentication()        
 
     def _request_authorization(self):
         '''
@@ -183,23 +188,22 @@ class Backend(PeriodicImportBackend):
             return
             
         '''
-        #td_disc = self.td_proxy.get_td_disc()
-        td_task = self.td_proxy.get_td_tasks_dict()[2274973628]
+        td_disc = self.td_proxy.get_td_disc()
+        td_task = self.td_proxy.get_td_tasks_dict()[2293384448]
         #tags = ['@home', '@songs', '@test-tag']
-        task = self.datastore.get_task("020ef3d3-8389-4d7d-92a4-8b62ff8d8a7a")
-        #pprint (td_task.get_tags())
-        pprint (type(td_task.get_id()))
-        k = td_task.get_id()
-        pprint (str(k))
-        dt = task.get_modified()
-        print(int(dt.strftime("%s")))
-        print(td_task.get_modified())
-        #meme = self.sync_engine.get_meme_from_local_id(task.get_id())
-        #newest = meme.which_is_newest(task.get_modified(),
-                                              #td_task.get_modified())
+        task = self.datastore.get_task("8b676664-7fae-40d5-b7c8-076331beaa23")
+        rt = self.xml_tree.getroot()
+        t_mod = self.get_param(rt, "8b676664-7fae-40d5-b7c8-076331beaa23", "modified")
+        print (type(t_mod), t_mod)
+        print (task.get_title())
+        #print(int(dt.strftime("%s")))
+        print(type(td_task.get_modified()), td_task.get_modified())
+        meme = self.sync_engine.get_meme_from_local_id(task.get_id())
+        newest = meme.which_is_newest(t_mod,
+                                              td_task.get_modified())
                                               
-        #print (newest)
-
+        print (newest)
+        
         #tags = gtg_task.get_tags()
         #tags = [tag.get_name() for tag in tags]
         #print (tags)
@@ -211,8 +215,8 @@ class Backend(PeriodicImportBackend):
         #pprint (tag_to_project_disc)
         '''
             
-        #if self._this_is_the_first_loop:
-            #self._on_successful_authentication()
+        if self._this_is_the_first_loop:
+            self._on_successful_authentication()
             
         # we get the old list of synced tasks, and compare with the new tasks
         # set
@@ -276,6 +280,7 @@ class Backend(PeriodicImportBackend):
                 except KeyError:
                     pass
                     
+                    
     def _on_successful_authentication(self):
         '''
         Saves the token and requests a full flush on first autentication
@@ -303,9 +308,9 @@ class Backend(PeriodicImportBackend):
                 self.td_proxy.refresh_td_tasks_dict()
             td_task = self.td_proxy.get_td_tasks_dict()[td_task_id]
             td_task.delete()
-            Log.debug("removing task %s fromTD " % td_task_id)
+            Log.debug("removing task %s from TD " % td_task_id)
             self.sync_engine.break_relationship(remote_id=td_task_id)
-            self.td_proxy.update_mod_disc(str(td_task_id), None, rm=True)
+            #self.td_proxy.update_mod_disc(str(td_task_id), None, rm=True)
         except KeyError:
             pass
             try:
@@ -335,12 +340,13 @@ class Backend(PeriodicImportBackend):
             self.datastore.has_task,
             self.td_proxy.has_td_task,
             is_syncable)
-        Log.debug("GTG<-TD set task (%s, %s)" % (action, td_task.get_title()))
+        #Log.debug("GTG<-TD set task (%s, %s)" % (action, td_task.get_title()))
         
         if action is None:
             return
 
         if action == SyncEngine.ADD:
+            Log.debug("GTG<-TD adding task (%s, %s)" %(action, td_task.get_title()))
             if td_task.get_status() != Task.STA_ACTIVE:
                 # OPTIMIZATION:
                 # we don't sync tasks that have already been closed before we
@@ -361,22 +367,39 @@ class Backend(PeriodicImportBackend):
         elif action == SyncEngine.UPDATE:
             task = self.datastore.get_task(tid)
             with self.datastore.get_backend_mutex():
+                xml_tree = ET.parse(self.gtg_xml)
+                rt = xml_tree.getroot()
+                local_modified = self.get_param(rt, task.get_id(), "modified")
+                if not local_modified:
+                    local_modified = task.get_modified()
+                #Log.debug("GTG_modified: %s, TD_modified: %s" % (task.get_modified(), 
+                                                                #td_task.get_modified()))
                 meme = self.sync_engine.get_meme_from_remote_id(td_task_id)
-                newest = meme.which_is_newest(task.get_modified(),
+                newest = meme.which_is_newest(local_modified,
                                               td_task.get_modified())
+                #print ("newest is {}, {}".format(newest, task.get_title()))                              
                 if newest == "remote":
+                    Log.debug("GTG<-TD updating task (%s, %s)" %(action, td_task.get_title()))
                     self._populate_task(task, td_task)
                     meme.set_remote_last_modified(td_task.get_modified())
                     meme.set_local_last_modified(task.get_modified())
+                elif newest == "local":
+                    Log.debug("GTG->TD updating td_task (%s, %s)" % (action, task.get_title()))
+                    try:
+                        self._populate_td_task(task, td_task)
+                    except:
+                        raise
+                    meme.set_remote_last_modified(td_task.get_modified())
+                    meme.set_local_last_modified(local_modified)    
                 else:
                     # we skip saving the state
                     return
 
         elif action == SyncEngine.REMOVE:
             try:
+                Log.debug("GTG<-TD removing task (%s, %s)" %(action, td_task.get_title()))
                 td_task.delete()
                 self.sync_engine.break_relationship(remote_id=td_task_id)
-                self.td_proxy.update_mod_disc(str(td_task_id), None, rm=True)
             except KeyError:
                 pass
 
@@ -404,12 +427,13 @@ class Backend(PeriodicImportBackend):
             self.datastore.has_task,
             self.td_proxy.has_td_task,
             is_syncable)
-        Log.debug("GTG->TD set task (%s, %s)" % (action, task.get_title()))
+        #Log.debug("GTG->TD set task (%s, %s)" % (action, task.get_title()))
 
         if action is None:
             return
 
         if action == SyncEngine.ADD:
+            Log.debug("GTG->TD adding td_task (%s, %s)" % (action, task.get_title()))
             if task.get_status() != Task.STA_ACTIVE:
                 # OPTIMIZATION:
                 # we don't sync tasks that have already been closed before we
@@ -440,18 +464,28 @@ class Backend(PeriodicImportBackend):
                 self.td_proxy.refresh_td_tasks_dict()
                 td_task = self.td_proxy.get_td_tasks_dict()[td_task_id]
             with self.datastore.get_backend_mutex():
+                try:
+                    xml_tree = ET.parse(self.gtg_xml)
+                    rt = xml_tree.getroot()
+                    local_modified = self.get_param(rt, task.get_id(), "modified")
+                    if not local_modified:
+                        local_modified = task.get_modified()
+                except:
+                    local_modified = task.get_modified()                    
                 meme = self.sync_engine.get_meme_from_local_id(task.get_id())
-                newest = meme.which_is_newest(task.get_modified(),
+                newest = meme.which_is_newest(local_modified,
                                               td_task.get_modified())
+                                              
+                #Log.debug("GTG_modified: %s, TD_modified: %s" % (task.get_modified(), 
+                                                                #td_task.get_modified()))
                 if newest == "local":
+                    Log.debug("GTG->TD updating td_task (%s, %s)" % (action, task.get_title()))
                     try:
-                        Log.debug("Updating %s", td_task.get_title())
                         self._populate_td_task(task, td_task)
                     except:
-                        #self.td_proxy.unroll_changes(transaction_ids)
                         raise
                     meme.set_remote_last_modified(td_task.get_modified())
-                    meme.set_local_last_modified(task.get_modified())
+                    meme.set_local_last_modified(local_modified)
                 else:
                     # we skip saving the state
                     return
@@ -557,10 +591,7 @@ class Backend(PeriodicImportBackend):
         if td_task.get_due_date() != due_date:
             self.__call_or_retry(td_task.set_due_date, due_date)
             #Log.debug("Td_task due date: %s", td_task.get_due_date())
-        
-        task_mod = task.get_modified()
-        td_mod_stamp = int(task_mod.strftime("%s"))    
-        self.td_proxy.update_mod_disc(str(td_task.get_id()), td_mod_stamp, rm=False) 
+         
     def __call_or_retry(self, fun, *args):
         '''
         This function cannot stand the call "fun" to fail, so it retries
@@ -590,6 +621,30 @@ class Backend(PeriodicImportBackend):
             if "@" + tag in attached_tags:
                 return True
         return False
+        
+        
+    #Hack to get local modified time as task.get_modified always returns
+    #current datetime
+    
+    def item_exists(self, rt, task_id):
+        exp =  ".//*[@id='{}']".format(task_id)
+        if rt.find(exp) is not None:
+            return True
+        else:
+            return False
+            
+    def get_param(self, rt, task_id, param):
+        exp =  ".//*[@id='{}']".format(task_id)
+        if rt.find(exp) is not None:
+            for task in rt.findall(exp):
+                output = task.find(param).text
+                output = datetime.datetime.strptime(output, "%Y-%m-%dT%H:%M:%S")
+                if output:
+                    return output
+                else:
+                    return None
+        else:
+            return None         
 
 
 
@@ -708,7 +763,7 @@ class TDProxy(object):
         
     def save_to_json(self, data, file_path):
         with open(file_path, 'w') as f:
-            json.dump(data, f)
+            json.dump(data, f, indent=4)
             
     def load_from_json(self, file_path):
         with open(file_path) as data_file:
@@ -723,7 +778,7 @@ class TDProxy(object):
         if not os.path.exists(td_modified_file):        
             m = {}
             td_disc = self.load_from_json(td_cache_file)
-            td_mod_stamp = int(os.path.getmtime(td_cache_file))
+            td_mod_stamp = os.path.getmtime(td_cache_file)
             for td_task_disc in td_disc['items']:
                 m[str(td_task_disc['id'])] = td_mod_stamp    
             self.save_to_json(m, td_modified_file)
@@ -789,7 +844,7 @@ class TDProxy(object):
             self.is_not_refreshing.wait()
             return
         self.is_not_refreshing.clear()
-        Log.debug('refreshing todoist')
+        Log.debug('refreshing todoist......................................')
 
         # To understand what this function does, here's a sample output of the
         # plain getLists() from RTM api:
@@ -806,21 +861,20 @@ class TDProxy(object):
             self.td.sync()
             time.sleep(5)
             mod_disc = self.make_mod_disc()
+            td_disc = self.load_from_json(td_cache_file)
             remote_items_modified = False
 
         else:
             #print ("getting old modification time")
-            mod_disc, t = self.get_mod_disc()
+            #mod_disc, t = self.get_mod_disc()
                     
             # Now get td_disc
             td_disc_new = self.td.items.sync()
+            pprint(td_disc_new)
             td_disc = self.load_from_json(td_cache_file)
 
             if (len(td_disc_new['items'])) > 0:
-                task_ids = [i['id'] for i in td_disc_new['items']]
                 remote_items_modified = True
-                td_mod_stamp1 = int(os.path.getmtime(td_cache_file))
-                td_task_mod1 = datetime.datetime.fromtimestamp(td_mod_stamp1)
             else:
                 remote_items_modified = False
         
@@ -828,23 +882,18 @@ class TDProxy(object):
         td_labels = {}
         for label in td_disc['labels']:
             td_labels[label['id']] = label['name']
+            
+        #hack: get mod disc
+        r = requests.get("https://dl.dropboxusercontent.com/s/t4tcypscgpf9xn7/modified.json", stream=True)
+        mod_disc = (ast.literal_eval(r.content))
             	
         for td_task_disc in td_disc['items']:
-            if remote_items_modified:
-                if td_task_disc['id'] in task_ids:
-                    mod_disc[str(td_task_disc['id'])] = td_mod_stamp1
-                    self.save_to_json(mod_disc, td_modified_file)
-                    td_mod_final = td_task_mod1
-                else:
-                    # This possibly will never execute...just for fail safe
-                    td_mod_stamp_f = mod_disc[str(td_task_disc['id'])]
-                    td_mod_final = datetime.datetime.fromtimestamp(td_mod_stamp_f)
+            td_task_id = str(td_task_disc['id'])
+            if td_task_id in mod_disc:
+                td_timestamp = int(mod_disc[td_task_id])
+                td_mod_final = datetime.datetime.fromtimestamp(td_timestamp)
             else:
-                #print (mod_disc)
-                td_mod_stamp_f = mod_disc[str(td_task_disc['id'])]
-                #print (td_mod_stamp_f)
-                td_mod_final = datetime.datetime.fromtimestamp(td_mod_stamp_f)
-                
+                td_mod_final = datetime.datetime.now()               
             label_names = [td_labels[i] for i in td_task_disc['labels']]
             #td_task_disc['label_names'] = label_names
             td_task = Struct(td_task_disc)
@@ -929,12 +978,14 @@ class TDProxy(object):
             
         p = self.td_cache.split('todoist_cache')[0]
         td_cache_file = p + 'todoist_cache' + self.token + '.json'
-        td_task_mod = int(os.path.getmtime(td_cache_file))
-        td_task_mod = datetime.datetime.fromtimestamp(td_task_mod)
+        td_task_mod = os.path.getmtime(td_cache_file)
+        td_mod_final3 = datetime.datetime.fromtimestamp(int(td_task_mod))
+        td_mod_final2 = td_mod_final3.strftime("%Y-%m-%dT%H:%M:%S")
+        td_mod_final = datetime.datetime.strptime(td_mod_final2, "%Y-%m-%dT%H:%M:%S")
         
         td_task = TDTask(task_obj,
                         task_obj.project_id,
-                        td_task_mod,
+                        td_mod_final,
                         td_cache_file,
                         self.td)
         # adding to the dict right away
