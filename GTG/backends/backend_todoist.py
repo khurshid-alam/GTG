@@ -346,7 +346,6 @@ class Backend(PeriodicImportBackend):
             return
 
         if action == SyncEngine.ADD:
-            Log.debug("GTG<-TD adding task (%s, %s)" %(action, td_task.get_title()))
             if td_task.get_status() != Task.STA_ACTIVE:
                 # OPTIMIZATION:
                 # we don't sync tasks that have already been closed before we
@@ -362,6 +361,7 @@ class Backend(PeriodicImportBackend):
                 local_id=tid,
                 remote_id=td_task_id,
                 meme=meme)
+            Log.debug("GTG<-TD adding task (%s, %s)" %(action, td_task.get_title()))
             self.datastore.push_task(task)
 
         elif action == SyncEngine.UPDATE:
@@ -528,6 +528,7 @@ class Backend(PeriodicImportBackend):
             td_task.delete()
         else:
             self.datastore.request_task_deletion(tid)
+        self.save_state()
 
     def _populate_task(self, task, td_task):
         '''
@@ -537,7 +538,8 @@ class Backend(PeriodicImportBackend):
         #task.set_text(td_task.get_text())
         task.set_due_date(td_task.get_due_date())
         status = td_task.get_status()
-        if GTG_TO_TD_STATUS[task.get_status()] != status:
+        #Log.debug("GTG<-TD completing gtg_task (%s)" % (task.get_title()))
+        if task.get_status() != status:
             task.set_status(td_task.get_status())
         # tags
         tags = set(['@%s' % tag for tag in td_task.get_tags()])
@@ -961,13 +963,13 @@ class TDProxy(object):
                         break                
                 if project_id:
                     print (project_id)                     
-                    api_call = self.td.items.add(title, project_id, labels=label_ids)
+                    api_call = self.td.items.add(title, project_id=project_id, labels=label_ids)
                 else: # But project not found, must be new tag in gtg, so use Inbox
                     api_call = self.td.items.add(title, '', labels=label_ids)
             else:
                 api_call = self.td.items.add(title, '',labels=label_ids)    
         else: #no tags, we create a simple task in Inbox
-            api_call = self.td.items.add(title, '')
+            api_call = self.td.items.add(title)
         
         #print (api_call)
         result = self.td.commit()
@@ -1091,9 +1093,9 @@ class TDTask(object):
         '''Sets the task status, in GTG terminology'''
         status = GTG_TO_TD_STATUS[gtg_status]
         if status is True:
-            result = self.td.items.uncomplete([self.td_task.id])
+            result = self.td.items.uncomplete(self.td_task.id)
         else:
-            result = self.td.items.complete([self.td_task.id])
+            result = self.td.items.complete(self.td_task.id)
         self.td.commit()
         
     def get_tags(self):
@@ -1150,22 +1152,28 @@ class TDTask(object):
         '''
         Gets the task due date
         '''
-        due = self.td_task.due_date_utc
-        if due == "" or due is None:
+        if hasattr(self.td_task, 'due'):
+            due = self.td_task.due
+
+            if due == "" or due is None:
+                return Date.no_date()
+            else:
+                due = due.date
+                date = self.__time_td_to_datetime(due).date()
+                return Date(date)
+        else:
             return Date.no_date()
-        date = self.__time_td_to_datetime(due).date()
-        return Date(date)
         
     def set_due_date(self, due):
         if due is None:
-            self.td.items.update(self.td_task.id, date_string=None)
+            self.td.items.update(self.td_task.id, due=None)
         else:
-            due_c = self.__time_date_to_td(due)
-            self.td.items.update(self.td_task.id, date_string=due_c)
+            due_c = {"date": self.__time_date_to_td(due)}
+            self.td.items.update(self.td_task.id, due=due_c)
         self.td.commit()
         
     def delete(self):
-        self.td.items.delete([self.td_task.id])
+        self.td.items.delete(self.td_task.id)
         self.td.commit()
         
     # TD speaks utc, and accepts utc if the "parse" option is set.
@@ -1180,27 +1188,33 @@ class TDTask(object):
         return dt.replace(tzinfo=None)
 
     def __time_td_to_datetime(self, string):
-        string = string.split(' +0000')[0]
+        #string = string.split(' +0000')[0]
         #print (string)
-        dt = datetime.datetime.strptime(string,
-                                        "%a %d %b %Y %H:%M:%S")
-        return self.__tz_utc_to_local(dt)
+        if "T" in string:
+            dt = datetime.datetime.strptime(string,
+                                        "%Y-%m-%dT%H:%M:%SZ")
+        else:
+            dt = datetime.datetime.strptime(string,
+                                        "%Y-%m-%d")
+        #return self.__tz_utc_to_local(dt)
+        return dt
 
     def __time_td_to_date(self, string):
-        string = string.split(' +0000')[0]
+        #string = string.split(' +0000')[0]
         dt = datetime.datetime.strptime(string,
                                         "%a %d %b %Y %H:%M:%S")
-        return self.__tz_utc_to_local(dt)
+        #return self.__tz_utc_to_local(dt)
+        return dt
 
     def __time_datetime_to_td(self, timeobject):
         if timeobject is None:
             return ""
-        timeobject = self.__tz_local_to_utc(timeobject)
+        #timeobject = self.__tz_local_to_utc(timeobject)
         return timeobject.strftime("%Y-%m-%dT%H:%M:%S")
 
     def __time_date_to_td(self, timeobject):
         if timeobject is None:
-            return ""
+            return None
         # WARNING: no timezone? seems to break the symmetry.
         return timeobject.strftime("%Y-%m-%d")
 
