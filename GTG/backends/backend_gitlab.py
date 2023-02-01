@@ -153,13 +153,13 @@ class Backend(PeriodicImportBackend):
 		#Fetching the issues
 		self.cancellation_point()
 		self._gl_issues = []
-		self._gl_issues = self._project.issues.list() #Network Call
+		self._gl_issues = self._project.issues.list(all=True) #Network Call
 
 		# If it's the very first time the backend is run, it's possible that
 		# the user already synced his tasks in some way (but we don't know
 		# that). Therefore, we attempt to induce those tasks relationships
 		# matching the url attribute.
-		'''
+		
 		if self._parameters["is-first-run"]:
 			with self._mutex:
 				for tid in self.datastore.get_all_tasks():
@@ -188,7 +188,7 @@ class Backend(PeriodicImportBackend):
 						meme=meme)
 				# a first run has been completed successfully
 				self._parameters["is-first-run"] = False
-		'''
+		
 
 		# Adding and updating
 		for gl_issue in self._gl_issues:
@@ -251,7 +251,7 @@ class Backend(PeriodicImportBackend):
 												meme.get_remote_last_modified(),
 												meme.get_local_last_modified()))
 				if newest == "remote":
-					Log.debug("GTG<-TD updating task (%s, %s)" %(action, task.get_title()))
+					Log.debug("GTG<-Gitlab updating task (%s, %s)" %(action, task.get_title()))
 					self._populate_task(task, gl_issue)
 					meme.set_remote_last_modified(self._get_gl_issue_modified(gl_issue))
 					meme.set_local_last_modified(task.get_modified())
@@ -260,7 +260,7 @@ class Backend(PeriodicImportBackend):
 					return
 
 			elif action == SyncEngine.REMOVE:
-				Log.debug("GTG->TD removing td_task %s" %(action, str(gl_issue.web_url)))
+				Log.debug("GTG->Gitlab removing td_task %s" %(action, str(gl_issue.web_url)))
 				self._project.issues.delete(gl_issue.iid)
 				try:
 					self.sync_engine.break_relationship(remote_id=str(gl_issue.web_url))
@@ -284,10 +284,10 @@ class Backend(PeriodicImportBackend):
 
 		# attributes
 		task.set_attribute("web_url", str(gl_issue.web_url))
-		task.set_attribute("issue_id", gl_issue.id)
-		task.set_attribute("issue_iid", gl_issue.iid)
+		task.set_attribute("gl_issue_id", gl_issue.id)
+		task.set_attribute("gl_issue_iid", gl_issue.iid)
 		remote_modified_dt = self._gl_date_to_datetime(str(gl_issue.updated_at))
-		task.set_attribute("issue_modified", remote_modified_dt.strftime("%Y-%m-%dT%H:%M:%S"))
+		task.set_attribute("gl_issue_modified", remote_modified_dt.strftime("%Y-%m-%dT%H:%M:%S"))
 
 		# Status
 		if str(gl_issue.state) == "closed":
@@ -331,8 +331,8 @@ class Backend(PeriodicImportBackend):
 					task = self.datastore.get_task(tid)
 					url  = task.get_attribute("web_url")
 				Log.debug("GTG->TD remove_task %s %s" % (tid, url))
-				issue_iid = os.path.basename(url)
-				self._project.issues.delete(issue_iid)
+				gl_issue_iid = os.path.basename(url)
+				self._project.issues.delete(gl_issue_iid)
 					
 			except KeyError:
 				pass
@@ -371,11 +371,14 @@ class Backend(PeriodicImportBackend):
 			if task.get_title() == "My new task":
 				return
 
+			if len(task.get_tags()) < 1:
+				return
+
 			elif action == SyncEngine.ADD:
 				time.sleep(2)
 				if not task.get_tags():
 					return
-				Log.debug("GTG->TD adding td_task (%s, %s)" % (action, task.get_title()))
+				Log.debug("GTG->Gitlab adding td_task (%s, %s)" % (action, task.get_title()))
 
 				gl_issue_new = self._create_gl_issue(task)
 				self._populate_gl_issue(task, gl_issue_new)
@@ -397,12 +400,12 @@ class Backend(PeriodicImportBackend):
 
 			elif action == SyncEngine.UPDATE:
 				time.sleep(2) # We give time for backend_localfile to change the modified date
-				issue_iid = task.get_attribute("issue_iid")
-				if issue_iid:
-					gl_issue = self._project.issues.get(issue_iid)
+				gl_issue_iid = task.get_attribute("gl_issue_iid")
+				if gl_issue_iid:
+					gl_issue = self._project.issues.get(gl_issue_iid)
 				else:
-					issue_iid = os.path.basename(self.sync_engine.get_remote_id(tid))
-					gl_issue = self._project.issues.get(issue_iid)
+					gl_issue_iid = os.path.basename(self.sync_engine.get_remote_id(tid))
+					gl_issue = self._project.issues.get(gl_issue_iid)
 				meme = self.sync_engine.get_meme_from_local_id(task.get_id())
 				task_modified_alt = self._get_task_modified_alt(task.get_id())
 				newest = meme.which_is_newest(task_modified_alt,
@@ -416,7 +419,7 @@ class Backend(PeriodicImportBackend):
 												meme.get_remote_last_modified(),
 												meme.get_local_last_modified()))
 				if newest == "local":
-					Log.debug("GTG->TD updating td_task (%s, %s)" % (action, task.get_title()))
+					Log.debug("GTG->Gitlab updating td_task (%s, %s)" % (action, task.get_title()))
 					self._populate_gl_issue(task, gl_issue)
 					meme.set_remote_last_modified(self._get_gl_issue_modified(gl_issue))
 					meme.set_local_last_modified(task_modified_alt)
@@ -437,19 +440,19 @@ class Backend(PeriodicImportBackend):
 			elif action == SyncEngine.LOST_SYNCABILITY:
 				#Log.debug("Action: %s url: %s" %(action, url))
 				try:
-					issue_iid = task.get_attribute("issue_iid")
+					gl_issue_iid = task.get_attribute("gl_issue_iid")
 				except KeyError:
                 	# in this case, we don't have yet the task in our local cache
                 	# of what's on the gitlab website 
 					#pass
 
-					Log.debug("Couldn't find issue_iid for that task..Getting relative issue from web")
+					Log.debug("Couldn't find gl_issue_iid for that task..Getting relative issue from web")
 					gl_issues_new = self._project.issues.list() #Network Call
 					for gl_issue_new in gl_issues_new:
 						if str(gl_issue_new.web_url) == url:
 							self._exec_lost_syncability(tid, gl_issue)	
 				finally:
-					gl_issue = self._project.issues.get(issue_iid)
+					gl_issue = self._project.issues.get(gl_issue_iid)
 					if gl_issue:
 						self._exec_lost_syncability(tid, gl_issue)
 
@@ -499,12 +502,12 @@ class Backend(PeriodicImportBackend):
 
 
 		#Setting missing attributes when GTG creates a task first time
-		if not task.get_attribute("issue_iid"):
+		if not task.get_attribute("gl_issue_iid"):
 			task.set_attribute("web_url", str(gl_issue.web_url))
-			task.set_attribute("issue_id", gl_issue.id)
-			task.set_attribute("issue_iid", gl_issue.iid)
+			task.set_attribute("gl_issue_id", gl_issue.id)
+			task.set_attribute("gl_issue_iid", gl_issue.iid)
 			remote_modified_dt = self._gl_date_to_datetime(str(gl_issue.updated_at))
-			task.set_attribute("issue_modified", remote_modified_dt.strftime("%Y-%m-%dT%H:%M:%S"))
+			task.set_attribute("gl_issue_modified", remote_modified_dt.strftime("%Y-%m-%dT%H:%M:%S"))
 
 
 ###############################################################################
